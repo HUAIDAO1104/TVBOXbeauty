@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 首页顶部栏 - 现代化版本
+     布局层级：
+     ConstraintLayout
+       ├─ topLayout：顶部导航栏（App名+分类Tab+工具图标）
+       └─ contentLayout：内容区（ViewPager）
+-->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- 顶部导航栏 -->
+    <LinearLayout
+        android:id="@+id/topLayout"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/vs_60"
+        android:layout_marginTop="@dimen/vs_10"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingLeft="@dimen/vs_40"
+        android:paddingRight="@dimen/vs_40"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- 左侧主题色装饰条 + App名称 -->
+        <View
+            android:layout_width="@dimen/vs_5"
+            android:layout_height="@dimen/vs_30"
+            android:layout_marginEnd="@dimen/vs_12"
+            android:layout_marginRight="@dimen/vs_12"
+            android:background="?attr/color_theme" />
+
+        <TextView
+            android:id="@+id/tvName"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="@dimen/vs_30"
+            android:background="@drawable/shape_toplayout_tvname"
+            android:clickable="true"
+            android:ellipsize="marquee"
+            android:focusable="true"
+            android:focusableInTouchMode="false"
+            android:gravity="left|center_vertical"
+            android:nextFocusDown="@id/mGridViewCategory"
+            android:nextFocusRight="@id/mGridViewCategory"
+            android:singleLine="true"
+            android:text="@string/app_name"
+            android:textAlignment="gravity"
+            android:textColor="@color/font_home_selector"
+            android:textSize="@dimen/ts_30"
+            android:textStyle="bold" />
+
+        <!-- 分类标签 TvRecyclerView（占据中间主要空间）-->
+        <com.owen.tvrecyclerview.widget.TvRecyclerView
+            android:id="@+id/mGridViewCategory"
+            android:layout_width="@dimen/vs_0"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:nextFocusUp="@id/tvName"
+            app:tv_selectedItemIsCentered="true" />
+
+        <!-- 右侧工具图标组 -->
+        <ImageView
+            android:id="@+id/tvWifi"
+            android:layout_width="@dimen/vs_50"
+            android:layout_height="@dimen/vs_50"
+            android:layout_marginStart="@dimen/vs_8"
+            android:layout_marginLeft="@dimen/vs_8"
+            android:background="@drawable/button_dialog_vod"
+            android:clickable="true"
+            android:focusable="true"
+            android:nextFocusLeft="@id/mGridViewCategory"
+            android:padding="@dimen/vs_5"
+            android:src="@drawable/hm_wifi_no" />
+
+        <ImageView
+            android:id="@+id/tvFind"
+            android:layout_width="@dimen/vs_50"
+            android:layout_height="@dimen/vs_50"
+            android:layout_marginStart="@dimen/vs_8"
+            android:layout_marginLeft="@dimen/vs_8"
+            android:background="@drawable/button_dialog_vod"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="@dimen/vs_5"
+            android:src="@drawable/hm_search" />
+
+        <ImageView
+            android:id="@+id/tvStyle"
+            android:layout_width="@dimen/vs_50"
+            android:layout_height="@dimen/vs_50"
+            android:layout_marginStart="@dimen/vs_8"
+            android:layout_marginLeft="@dimen/vs_8"
+            android:background="@drawable/button_dialog_vod"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="@dimen/vs_10"
+            android:src="@drawable/hm_left_right" />
+
+        <ImageView
+            android:id="@+id/tvDrawer"
+            android:layout_width="@dimen/vs_50"
+            android:layout_height="@dimen/vs_50"
+            android:layout_marginStart="@dimen/vs_8"
+            android:layout_marginLeft="@dimen/vs_8"
+            android:background="@drawable/button_dialog_vod"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="@dimen/vs_5"
+            android:src="@drawable/hm_drawer" />
+
+        <ImageView
+            android:id="@+id/tvMenu"
+            android:layout_width="@dimen/vs_50"
+            android:layout_height="@dimen/vs_50"
+            android:layout_marginStart="@dimen/vs_8"
+            android:layout_marginLeft="@dimen/vs_8"
+            android:background="@drawable/button_dialog_vod"
+            android:clickable="true"
+            android:focusable="true"
+            android:nextFocusDown="@id/tvDrive"
+            android:padding="@dimen/vs_5"
+            android:src="@drawable/hm_settings" />
+
+        <TextView
+            android:id="@+id/tvDate"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginStart="@dimen/vs_12"
+            android:layout_marginLeft="@dimen/vs_12"
+            android:focusable="false"
+            android:focusableInTouchMode="false"
+            android:gravity="right|center_vertical"
+            android:textAlignment="gravity"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/ts_20"
+            tools:text="12:00" />
+
+    </LinearLayout>
+
+    <!-- 内容区 -->
+    <LinearLayout
+        android:id="@+id/contentLayout"
+        android:layout_width="@dimen/vs_0"
+        android:layout_height="@dimen/vs_0"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/topLayout">
+
+        <com.github.tvbox.osc.ui.tv.widget.NoScrollViewPager
+            android:id="@+id/mViewPager"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

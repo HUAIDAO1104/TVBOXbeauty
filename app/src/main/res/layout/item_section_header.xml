@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 内容分区标题行：左侧主题色装饰条 + 标题文字 + 右侧"更多"按钮 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="@dimen/vs_55"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingLeft="@dimen/vs_40"
+    android:paddingRight="@dimen/vs_40">
+
+    <!-- 左侧装饰条 -->
+    <View
+        android:layout_width="@dimen/vs_5"
+        android:layout_height="@dimen/vs_30"
+        android:layout_marginEnd="@dimen/vs_12"
+        android:layout_marginRight="@dimen/vs_12"
+        android:background="@drawable/shape_section_indicator" />
+
+    <!-- 分区标题 -->
+    <TextView
+        android:id="@+id/tvSectionTitle"
+        android:layout_width="@dimen/vs_0"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textColor="@color/color_FFFFFF"
+        android:textSize="@dimen/ts_26"
+        android:textStyle="bold" />
+
+    <!-- 更多按钮（可选） -->
+    <TextView
+        android:id="@+id/tvSectionMore"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/shape_nav_btn_focus"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:paddingLeft="@dimen/vs_15"
+        android:paddingTop="@dimen/vs_5"
+        android:paddingRight="@dimen/vs_15"
+        android:paddingBottom="@dimen/vs_5"
+        android:text="更多 >"
+        android:textColor="@color/color_FFFFFF_70"
+        android:textSize="@dimen/ts_20"
+        android:visibility="gone" />
+
+</LinearLayout>
