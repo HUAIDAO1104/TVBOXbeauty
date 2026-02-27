@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 卡片底部渐变遮罩 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="270"
+        android:endColor="@color/color_000000_80"
+        android:startColor="@color/transparent" />
+    <corners
+        android:bottomLeftRadius="@dimen/vs_12"
+        android:bottomRightRadius="@dimen/vs_12"
+        android:topLeftRadius="0dp"
+        android:topRightRadius="0dp" />
+</shape>

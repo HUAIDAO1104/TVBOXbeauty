@@ -1,0 +1,621 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  首页 UserFragment - 仿大厂TV版布局（爱奇艺/腾讯视频风格）
+
+  整体结构（垂直 LinearLayout）：
+    ① 顶部横向导航栏（快捷功能按钮）
+    ② NestedScrollView（下方可滚动内容区）
+         全宽轮播图
+         站点推荐 / 豆瓣热播 分区（横向列表 + 查看全部）
+         热门综艺 分区
+         热门电影 分区
+         热门剧集 分区
+         历史记录 分区
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:orientation="vertical">
+
+    <!-- ══════════════════════════════════════════════════
+         ① 顶部横向导航栏
+         ══════════════════════════════════════════════════ -->
+    <LinearLayout
+        android:id="@+id/tvUserHome"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/vs_60"
+        android:background="@color/color_000000_80"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingLeft="@dimen/vs_20"
+        android:paddingRight="@dimen/vs_20">
+
+        <!-- 历史 -->
+        <LinearLayout
+            android:id="@+id/tvHistory"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/vs_45"
+            android:layout_marginEnd="@dimen/vs_6"
+            android:background="@drawable/shape_nav_btn_focus"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingLeft="@dimen/vs_15"
+            android:paddingRight="@dimen/vs_15">
+
+            <ImageView
+                android:layout_width="@dimen/vs_22"
+                android:layout_height="@dimen/vs_22"
+                android:layout_marginEnd="@dimen/vs_5"
+                android:alpha="0.9"
+                app:srcCompat="@drawable/hm_history" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:focusable="false"
+                android:text="历史"
+                android:textColor="@color/color_FFFFFF_90"
+                android:textSize="@dimen/ts_18" />
+        </LinearLayout>
+
+        <!-- 直播 -->
+        <LinearLayout
+            android:id="@+id/tvLive"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/vs_45"
+            android:layout_marginEnd="@dimen/vs_6"
+            android:background="@drawable/shape_nav_btn_focus"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingLeft="@dimen/vs_15"
+            android:paddingRight="@dimen/vs_15">
+
+            <ImageView
+                android:layout_width="@dimen/vs_22"
+                android:layout_height="@dimen/vs_22"
+                android:layout_marginEnd="@dimen/vs_5"
+                android:alpha="0.9"
+                app:srcCompat="@drawable/hm_live" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:focusable="false"
+                android:text="直播"
+                android:textColor="@color/color_FFFFFF_90"
+                android:textSize="@dimen/ts_18" />
+        </LinearLayout>
+
+        <!-- 搜索 -->
+        <LinearLayout
+            android:id="@+id/tvSearch"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/vs_45"
+            android:layout_marginEnd="@dimen/vs_6"
+            android:background="@drawable/shape_nav_btn_focus"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingLeft="@dimen/vs_15"
+            android:paddingRight="@dimen/vs_15">
+
+            <ImageView
+                android:layout_width="@dimen/vs_22"
+                android:layout_height="@dimen/vs_22"
+                android:layout_marginEnd="@dimen/vs_5"
+                android:alpha="0.9"
+                app:srcCompat="@drawable/hm_search" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:focusable="false"
+                android:text="搜索"
+                android:textColor="@color/color_FFFFFF_90"
+                android:textSize="@dimen/ts_18" />
+        </LinearLayout>
+
+        <!-- 收藏 -->
+        <LinearLayout
+            android:id="@+id/tvFavorite"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/vs_45"
+            android:layout_marginEnd="@dimen/vs_6"
+            android:background="@drawable/shape_nav_btn_focus"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingLeft="@dimen/vs_15"
+            android:paddingRight="@dimen/vs_15">
+
+            <ImageView
+                android:layout_width="@dimen/vs_22"
+                android:layout_height="@dimen/vs_22"
+                android:layout_marginEnd="@dimen/vs_5"
+                android:alpha="0.9"
+                app:srcCompat="@drawable/hm_fav" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:focusable="false"
+                android:text="收藏"
+                android:textColor="@color/color_FFFFFF_90"
+                android:textSize="@dimen/ts_18" />
+        </LinearLayout>
+
+        <!-- 推送 -->
+        <LinearLayout
+            android:id="@+id/tvPush"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/vs_45"
+            android:layout_marginEnd="@dimen/vs_6"
+            android:background="@drawable/shape_nav_btn_focus"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingLeft="@dimen/vs_15"
+            android:paddingRight="@dimen/vs_15">
+
+            <ImageView
+                android:layout_width="@dimen/vs_22"
+                android:layout_height="@dimen/vs_22"
+                android:layout_marginEnd="@dimen/vs_5"
+                android:alpha="0.9"
+                app:srcCompat="@drawable/hm_push" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:focusable="false"
+                android:text="推送"
+                android:textColor="@color/color_FFFFFF_90"
+                android:textSize="@dimen/ts_18" />
+        </LinearLayout>
+
+        <!-- 网盘 -->
+        <LinearLayout
+            android:id="@+id/tvDrive"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/vs_45"
+            android:layout_marginEnd="@dimen/vs_6"
+            android:background="@drawable/shape_nav_btn_focus"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingLeft="@dimen/vs_15"
+            android:paddingRight="@dimen/vs_15">
+
+            <ImageView
+                android:layout_width="@dimen/vs_22"
+                android:layout_height="@dimen/vs_22"
+                android:layout_marginEnd="@dimen/vs_5"
+                android:alpha="0.9"
+                app:srcCompat="@drawable/hm_folder" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:focusable="false"
+                android:text="网盘"
+                android:textColor="@color/color_FFFFFF_90"
+                android:textSize="@dimen/ts_18" />
+        </LinearLayout>
+
+        <!-- Cookie设置 -->
+        <LinearLayout
+            android:id="@+id/tvDriveCookie"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/vs_45"
+            android:layout_marginEnd="@dimen/vs_6"
+            android:background="@drawable/shape_nav_btn_focus"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingLeft="@dimen/vs_15"
+            android:paddingRight="@dimen/vs_15">
+
+            <ImageView
+                android:layout_width="@dimen/vs_22"
+                android:layout_height="@dimen/vs_22"
+                android:layout_marginEnd="@dimen/vs_5"
+                android:alpha="0.9"
+                app:srcCompat="@drawable/hm_lan" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:focusable="false"
+                android:text="Cookie"
+                android:textColor="@color/color_FFFFFF_90"
+                android:textSize="@dimen/ts_18" />
+        </LinearLayout>
+
+        <!-- 弹性间距 -->
+        <View
+            android:layout_width="@dimen/vs_0"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+
+        <!-- 设置 -->
+        <LinearLayout
+            android:id="@+id/tvSetting"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/vs_45"
+            android:background="@drawable/shape_nav_btn_focus"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingLeft="@dimen/vs_15"
+            android:paddingRight="@dimen/vs_15">
+
+            <ImageView
+                android:layout_width="@dimen/vs_22"
+                android:layout_height="@dimen/vs_22"
+                android:layout_marginEnd="@dimen/vs_5"
+                android:alpha="0.9"
+                app:srcCompat="@drawable/hm_settings" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:focusable="false"
+                android:text="设置"
+                android:textColor="@color/color_FFFFFF_90"
+                android:textSize="@dimen/ts_18" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- ══════════════════════════════════════════════════
+         ② 以下内容区：NestedScrollView 可上下滚动
+         ══════════════════════════════════════════════════ -->
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:scrollbars="none"
+        android:descendantFocusability="afterDescendants">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:orientation="vertical">
+
+            <!-- ② 全宽轮播图 -->
+            <com.github.tvbox.osc.ui.tv.widget.BannerView
+                android:id="@+id/homeBanner"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/vs_260"
+                android:clipChildren="false"
+                android:focusable="true"
+                android:visibility="gone" />
+
+            <!-- ══ 站点推荐 / 豆瓣热播 分区 ══ -->
+            <LinearLayout
+                android:id="@+id/layoutSectionHeader"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/vs_45"
+                android:layout_marginTop="@dimen/vs_10"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingLeft="@dimen/vs_25"
+                android:paddingRight="@dimen/vs_20">
+
+                <View
+                    android:layout_width="@dimen/vs_4"
+                    android:layout_height="@dimen/vs_22"
+                    android:layout_marginEnd="@dimen/vs_10"
+                    android:background="@drawable/shape_section_indicator" />
+
+                <TextView
+                    android:id="@+id/tvSectionTitle"
+                    android:layout_width="@dimen/vs_0"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="站点推荐"
+                    android:textColor="@color/color_FFFFFF"
+                    android:textSize="@dimen/ts_22"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvSectionMore"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/shape_nav_btn_focus"
+                    android:focusable="true"
+                    android:paddingLeft="@dimen/vs_12"
+                    android:paddingTop="@dimen/vs_5"
+                    android:paddingRight="@dimen/vs_12"
+                    android:paddingBottom="@dimen/vs_5"
+                    android:text="查看全部 ›"
+                    android:textColor="@color/color_FFFFFF_70"
+                    android:textSize="@dimen/ts_16" />
+            </LinearLayout>
+
+            <!-- 站点推荐 横向列表 (Line模式) -->
+            <com.owen.tvrecyclerview.widget.TvRecyclerView
+                android:id="@+id/tvHotListForLine"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/vs_200"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:orientation="horizontal"
+                android:paddingLeft="@dimen/vs_20"
+                android:paddingTop="@dimen/vs_5"
+                android:paddingRight="@dimen/vs_20"
+                android:paddingBottom="@dimen/vs_8"
+                android:tag="tvHotListForLine"
+                app:tv_horizontalSpacingWithMargins="@dimen/vs_10"
+                app:tv_layoutManager="V7LinearLayoutManager"
+                app:tv_selectedItemIsCentered="false"
+                app:tv_verticalSpacingWithMargins="@dimen/vs_10" />
+
+            <!-- 站点推荐 Grid模式（隐藏） -->
+            <com.owen.tvrecyclerview.widget.TvRecyclerView
+                android:id="@+id/tvHotListForGrid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:descendantFocusability="afterDescendants"
+                android:paddingLeft="@dimen/vs_20"
+                android:paddingTop="@dimen/vs_5"
+                android:paddingRight="@dimen/vs_20"
+                android:paddingBottom="@dimen/vs_8"
+                android:tag="tvHotListForGrid"
+                android:visibility="gone"
+                app:tv_horizontalSpacingWithMargins="@dimen/vs_10"
+                app:tv_layoutManager="V7GridLayoutManager"
+                app:tv_selectedItemIsCentered="true"
+                app:tv_verticalSpacingWithMargins="@dimen/vs_10" />
+
+            <!-- ══ 热门综艺 分区 ══ -->
+            <LinearLayout
+                android:id="@+id/layoutVarietyHeader"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/vs_45"
+                android:layout_marginTop="@dimen/vs_10"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingLeft="@dimen/vs_25"
+                android:paddingRight="@dimen/vs_20">
+
+                <View
+                    android:layout_width="@dimen/vs_4"
+                    android:layout_height="@dimen/vs_22"
+                    android:layout_marginEnd="@dimen/vs_10"
+                    android:background="@drawable/shape_section_indicator" />
+
+                <TextView
+                    android:layout_width="@dimen/vs_0"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="热门综艺"
+                    android:textColor="@color/color_FFFFFF"
+                    android:textSize="@dimen/ts_22"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvVarietyMore"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/shape_nav_btn_focus"
+                    android:focusable="true"
+                    android:paddingLeft="@dimen/vs_12"
+                    android:paddingTop="@dimen/vs_5"
+                    android:paddingRight="@dimen/vs_12"
+                    android:paddingBottom="@dimen/vs_5"
+                    android:text="查看全部 ›"
+                    android:textColor="@color/color_FFFFFF_70"
+                    android:textSize="@dimen/ts_16" />
+            </LinearLayout>
+
+            <com.owen.tvrecyclerview.widget.TvRecyclerView
+                android:id="@+id/tvVarietyList"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/vs_200"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:orientation="horizontal"
+                android:paddingLeft="@dimen/vs_20"
+                android:paddingTop="@dimen/vs_5"
+                android:paddingRight="@dimen/vs_20"
+                android:paddingBottom="@dimen/vs_8"
+                app:tv_horizontalSpacingWithMargins="@dimen/vs_10"
+                app:tv_layoutManager="V7LinearLayoutManager"
+                app:tv_selectedItemIsCentered="false"
+                app:tv_verticalSpacingWithMargins="@dimen/vs_10" />
+
+            <!-- ══ 热门电影 分区 ══ -->
+            <LinearLayout
+                android:id="@+id/layoutMovieHeader"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/vs_45"
+                android:layout_marginTop="@dimen/vs_10"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingLeft="@dimen/vs_25"
+                android:paddingRight="@dimen/vs_20">
+
+                <View
+                    android:layout_width="@dimen/vs_4"
+                    android:layout_height="@dimen/vs_22"
+                    android:layout_marginEnd="@dimen/vs_10"
+                    android:background="@drawable/shape_section_indicator" />
+
+                <TextView
+                    android:layout_width="@dimen/vs_0"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="热门电影"
+                    android:textColor="@color/color_FFFFFF"
+                    android:textSize="@dimen/ts_22"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvMovieMore"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/shape_nav_btn_focus"
+                    android:focusable="true"
+                    android:paddingLeft="@dimen/vs_12"
+                    android:paddingTop="@dimen/vs_5"
+                    android:paddingRight="@dimen/vs_12"
+                    android:paddingBottom="@dimen/vs_5"
+                    android:text="查看全部 ›"
+                    android:textColor="@color/color_FFFFFF_70"
+                    android:textSize="@dimen/ts_16" />
+            </LinearLayout>
+
+            <com.owen.tvrecyclerview.widget.TvRecyclerView
+                android:id="@+id/tvMovieList"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/vs_200"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:orientation="horizontal"
+                android:paddingLeft="@dimen/vs_20"
+                android:paddingTop="@dimen/vs_5"
+                android:paddingRight="@dimen/vs_20"
+                android:paddingBottom="@dimen/vs_8"
+                app:tv_horizontalSpacingWithMargins="@dimen/vs_10"
+                app:tv_layoutManager="V7LinearLayoutManager"
+                app:tv_selectedItemIsCentered="false"
+                app:tv_verticalSpacingWithMargins="@dimen/vs_10" />
+
+            <!-- ══ 热门剧集 分区 ══ -->
+            <LinearLayout
+                android:id="@+id/layoutDramaHeader"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/vs_45"
+                android:layout_marginTop="@dimen/vs_10"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingLeft="@dimen/vs_25"
+                android:paddingRight="@dimen/vs_20">
+
+                <View
+                    android:layout_width="@dimen/vs_4"
+                    android:layout_height="@dimen/vs_22"
+                    android:layout_marginEnd="@dimen/vs_10"
+                    android:background="@drawable/shape_section_indicator" />
+
+                <TextView
+                    android:layout_width="@dimen/vs_0"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="热门剧集"
+                    android:textColor="@color/color_FFFFFF"
+                    android:textSize="@dimen/ts_22"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvDramaMore"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/shape_nav_btn_focus"
+                    android:focusable="true"
+                    android:paddingLeft="@dimen/vs_12"
+                    android:paddingTop="@dimen/vs_5"
+                    android:paddingRight="@dimen/vs_12"
+                    android:paddingBottom="@dimen/vs_5"
+                    android:text="查看全部 ›"
+                    android:textColor="@color/color_FFFFFF_70"
+                    android:textSize="@dimen/ts_16" />
+            </LinearLayout>
+
+            <com.owen.tvrecyclerview.widget.TvRecyclerView
+                android:id="@+id/tvDramaList"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/vs_200"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:orientation="horizontal"
+                android:paddingLeft="@dimen/vs_20"
+                android:paddingTop="@dimen/vs_5"
+                android:paddingRight="@dimen/vs_20"
+                android:paddingBottom="@dimen/vs_8"
+                app:tv_horizontalSpacingWithMargins="@dimen/vs_10"
+                app:tv_layoutManager="V7LinearLayoutManager"
+                app:tv_selectedItemIsCentered="false"
+                app:tv_verticalSpacingWithMargins="@dimen/vs_10" />
+
+            <!-- ══ 历史记录 分区 ══ -->
+            <LinearLayout
+                android:id="@+id/layoutHistoryHeader"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/vs_45"
+                android:layout_marginTop="@dimen/vs_10"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingLeft="@dimen/vs_25"
+                android:paddingRight="@dimen/vs_20">
+
+                <View
+                    android:layout_width="@dimen/vs_4"
+                    android:layout_height="@dimen/vs_22"
+                    android:layout_marginEnd="@dimen/vs_10"
+                    android:background="@drawable/shape_section_indicator" />
+
+                <TextView
+                    android:layout_width="@dimen/vs_0"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="历史记录"
+                    android:textColor="@color/color_FFFFFF"
+                    android:textSize="@dimen/ts_22"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvHistoryMore"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/shape_nav_btn_focus"
+                    android:focusable="true"
+                    android:paddingLeft="@dimen/vs_12"
+                    android:paddingTop="@dimen/vs_5"
+                    android:paddingRight="@dimen/vs_12"
+                    android:paddingBottom="@dimen/vs_5"
+                    android:text="查看全部 ›"
+                    android:textColor="@color/color_FFFFFF_70"
+                    android:textSize="@dimen/ts_16" />
+            </LinearLayout>
+
+            <com.owen.tvrecyclerview.widget.TvRecyclerView
+                android:id="@+id/tvHistoryList"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/vs_200"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:orientation="horizontal"
+                android:paddingLeft="@dimen/vs_20"
+                android:paddingTop="@dimen/vs_5"
+                android:paddingRight="@dimen/vs_20"
+                android:paddingBottom="@dimen/vs_8"
+                app:tv_horizontalSpacingWithMargins="@dimen/vs_10"
+                app:tv_layoutManager="V7LinearLayoutManager"
+                app:tv_selectedItemIsCentered="false"
+                app:tv_verticalSpacingWithMargins="@dimen/vs_10" />
+
+            <!-- 底部安全间距 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/vs_25" />
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+</LinearLayout>

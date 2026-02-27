@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 列表项目焦点 - 美化版：12mm圆角，主题色背景 + 白色描边 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:state_pressed="true">
+        <shape>
+            <corners android:radius="@dimen/vs_12" />
+            <solid android:color="?attr/color_theme_60" />
+            <stroke android:width="@dimen/vs_2" android:color="@color/color_FFFFFF" />
+        </shape>
+    </item>
+    <item android:state_focused="true">
+        <shape>
+            <corners android:radius="@dimen/vs_12" />
+            <solid android:color="?attr/color_theme_40" />
+            <stroke android:width="@dimen/vs_2" android:color="@color/color_FFFFFF" />
+        </shape>
+    </item>
+    <item android:state_focused="false" android:state_pressed="true">
+        <shape>
+            <corners android:radius="@dimen/vs_12" />
+            <solid android:color="?attr/color_theme_40" />
+        </shape>
+    </item>
+    <item android:state_focused="false">
+        <shape>
+            <corners android:radius="@dimen/vs_12" />
+            <solid android:color="@color/color_3D3D3D_45" />
+        </shape>
+    </item>
+</selector>
