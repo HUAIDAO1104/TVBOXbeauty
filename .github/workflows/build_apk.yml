@@ -6,13 +6,18 @@ on:
       - master
       - genspark_ai_developer
     paths:
-      - 'tvbox_source/**'
+      - 'app/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+      - 'gradle/**'
+      - 'gradle.properties'
       - '.github/workflows/build_apk.yml'
   pull_request:
     branches:
       - master
     paths:
-      - 'tvbox_source/**'
+      - 'app/**'
+      - 'build.gradle'
   workflow_dispatch:
     inputs:
       variant:
@@ -33,14 +38,6 @@ on:
         options:
           - debug
           - release
-      sign_apk:
-        description: '是否签名 APK'
-        required: false
-        default: 'true'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -50,9 +47,6 @@ jobs:
   build:
     name: "TVBox APK (${{ inputs.variant || 'arm64-java' }} / ${{ inputs.build_type || 'debug' }})"
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: tvbox_source
 
     steps:
       - name: Checkout repository
@@ -70,7 +64,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.gradle/wrapper
-          key: gradle-wrapper-${{ hashFiles('tvbox_source/gradle/wrapper/gradle-wrapper.properties') }}
+          key: gradle-wrapper-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: gradle-wrapper-
 
       - name: Cache Gradle caches
@@ -79,7 +73,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/configuration-cache
-          key: gradle-${{ runner.os }}-${{ hashFiles('tvbox_source/**/*.gradle*', 'tvbox_source/**/gradle-wrapper.properties') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', 'gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: gradle-${{ runner.os }}-
 
       - name: Cache Android SDK platforms
@@ -95,32 +89,37 @@ jobs:
           key: android-build-tools-34-${{ runner.os }}
 
       - name: Set up Android SDK
-        working-directory: ${{ github.workspace }}
         run: |
           yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
           $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
             "platforms;android-34" "build-tools;34.0.0" --channel=0 2>&1 | tail -3
 
-      # ← 修复点：去掉 cache: 'pip'，避免找不到 requirements.txt 报错
       - name: Set up Python 3.8
         uses: actions/setup-python@v5
         with:
           python-version: '3.8'
 
       - name: Install Python dependencies
-        working-directory: ${{ github.workspace }}
         run: pip install lxml ujson pyquery requests jsonpath cachetools pycryptodome beautifulsoup4
 
       - name: Patch Gradle wrapper URL
         run: |
-          sed -i 's|https://mirrors.cloud.tencent.com/gradle/|https://services.gradle.org/distributions/|g' gradle/wrapper/gradle-wrapper.properties
-          sed -i 's|https://downloads.gradle-dn.com/distributions/|https://services.gradle.org/distributions/|g' gradle/wrapper/gradle-wrapper.properties
+          sed -i \
+            's|https://mirrors.cloud.tencent.com/gradle/|https://services.gradle.org/distributions/|g' \
+            gradle/wrapper/gradle-wrapper.properties
+          sed -i \
+            's|https://downloads.gradle-dn.com/distributions/|https://services.gradle.org/distributions/|g' \
+            gradle/wrapper/gradle-wrapper.properties
+          echo "Gradle URL:"
           grep distributionUrl gradle/wrapper/gradle-wrapper.properties
 
       - name: Patch pyramid build.gradle
         run: |
           if [ -f pyramid/build.gradle ]; then
             sed -i '/buildPython.*python\.exe/d' pyramid/build.gradle
+            echo "pyramid/build.gradle patched"
+          else
+            echo "pyramid/build.gradle not found, skipping"
           fi
 
       - name: Create local.properties
@@ -140,31 +139,26 @@ jobs:
             KEY_ALIAS="$SECRET_KEY_ALIAS"
             KEY_PASS="$SECRET_KEY_PASS"
           else
-            cp -f ../.github/workflows/TVBoxOSC.jks app/TVBoxOSC.jks
+            cp -f .github/workflows/TVBoxOSC.jks app/TVBoxOSC.jks
             STORE_FILE="./TVBoxOSC.jks"
             STORE_PASS="TVBoxOSC"
             KEY_ALIAS="TVBoxOSC"
             KEY_PASS="TVBoxOSC"
           fi
-
-          printf '\nRELEASE_STORE_FILE=%s\n'     "$STORE_FILE" >> gradle.properties
-          printf 'RELEASE_STORE_PASSWORD=%s\n'   "$STORE_PASS" >> gradle.properties
-          printf 'RELEASE_KEY_ALIAS=%s\n'        "$KEY_ALIAS"  >> gradle.properties
-          printf 'RELEASE_KEY_PASSWORD=%s\n'     "$KEY_PASS"   >> gradle.properties
-
+          printf '\nRELEASE_STORE_FILE=%s\n'   "$STORE_FILE" >> gradle.properties
+          printf 'RELEASE_STORE_PASSWORD=%s\n' "$STORE_PASS" >> gradle.properties
+          printf 'RELEASE_KEY_ALIAS=%s\n'      "$KEY_ALIAS"  >> gradle.properties
+          printf 'RELEASE_KEY_PASSWORD=%s\n'   "$KEY_PASS"   >> gradle.properties
           python3 -c "
           import sys
-          store_file = sys.argv[1]
-          store_pass = sys.argv[2]
-          key_alias  = sys.argv[3]
-          key_pass   = sys.argv[4]
+          sf, sp, ka, kp = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
           signing = (
               '    signingConfigs {\n'
               '        myConfig {\n'
-              '            storeFile file(\"' + store_file + '\")\n'
-              '            storePassword \"' + store_pass + '\"\n'
-              '            keyAlias \"'    + key_alias  + '\"\n'
-              '            keyPassword \"' + key_pass   + '\"\n'
+              '            storeFile file(\"' + sf + '\")\n'
+              '            storePassword \"' + sp + '\"\n'
+              '            keyAlias \"' + ka + '\"\n'
+              '            keyPassword \"' + kp + '\"\n'
               '            v1SigningEnabled true\n'
               '            v2SigningEnabled true\n'
               '        }\n'
@@ -189,16 +183,16 @@ jobs:
           TYPE="${{ inputs.build_type || 'debug' }}"
           CAP="$(echo "${TYPE:0:1}" | tr a-z A-Z)${TYPE:1}"
           case "$VARIANT" in
-            arm64-java)    TASKS="assembleArm64GenericNormal${CAP}";   DESC="arm64-v8a/Java/${TYPE}";;
-            armeabi-java)  TASKS="assembleArmeabiGenericNormal${CAP}"; DESC="armeabi-v7a/Java/${TYPE}";;
-            arm64-python)  TASKS="assembleArm64GenericPython${CAP}";   DESC="arm64-v8a/Python/${TYPE}";;
-            all)           TASKS="assembleArm64GenericNormal${CAP} assembleArmeabiGenericNormal${CAP}"; DESC="arm64+armeabi/Java/${TYPE}";;
-            *)             TASKS="assembleArm64GenericNormal${CAP}";   DESC="arm64-v8a/Java/${TYPE}";;
+            arm64-java)   TASKS="assembleArm64GenericNormal${CAP}";  DESC="arm64-v8a/Java/${TYPE}";;
+            armeabi-java) TASKS="assembleArmeabiGenericNormal${CAP}"; DESC="armeabi-v7a/Java/${TYPE}";;
+            arm64-python) TASKS="assembleArm64GenericPython${CAP}";  DESC="arm64-v8a/Python/${TYPE}";;
+            all)          TASKS="assembleArm64GenericNormal${CAP} assembleArmeabiGenericNormal${CAP}"; DESC="arm64+armeabi/Java/${TYPE}";;
+            *)            TASKS="assembleArm64GenericNormal${CAP}";  DESC="arm64-v8a/Java/${TYPE}";;
           esac
           echo "tasks=$TASKS"     >> "$GITHUB_OUTPUT"
           echo "desc=$DESC"       >> "$GITHUB_OUTPUT"
           echo "build_type=$TYPE" >> "$GITHUB_OUTPUT"
-          echo "Task: $TASKS"
+          echo "Resolved: $TASKS"
 
       - name: Clean AndServer incremental cache
         run: |
@@ -210,26 +204,26 @@ jobs:
           GRADLE_OPTS: "-Xmx4g -Dfile.encoding=UTF-8 -Dkotlin.daemon.jvm.options=-Xmx2g"
         run: |
           chmod +x gradlew
+          echo "Building: ${{ steps.tasks.outputs.desc }}"
           ./gradlew ${{ steps.tasks.outputs.tasks }} \
             --build-cache --parallel --no-daemon --stacktrace -x lint \
-            2>&1 | tee ../build.log
+            2>&1 | tee build.log
 
       - name: Collect APK files
         if: success()
         run: |
-          mkdir -p ../output/apk
+          mkdir -p output/apk
           COUNT=0
           while IFS= read -r f; do
-            cp "$f" ../output/apk/
+            cp "$f" output/apk/
             echo "Collected: $(basename $f)"
             COUNT=$((COUNT+1))
           done < <(find app/build/outputs/apk -name "*.apk" 2>/dev/null)
           echo "APK_COUNT=$COUNT" >> "$GITHUB_ENV"
-          ls -lh ../output/apk/ || true
+          ls -lh output/apk/ || true
 
       - name: Build summary
         if: always()
-        working-directory: ${{ github.workspace }}
         run: |
           {
             echo "## TVBox APK 编译结果"
