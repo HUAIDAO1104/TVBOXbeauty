@@ -32,7 +32,7 @@ concurrency:
 
 jobs:
   build:
-    name: "TVBox APK (${{ inputs.variant || 'arm64-java' }} / ${{ inputs.build_type || 'debug' }})"
+    name: "TVBox APK"
     runs-on: ubuntu-latest
 
     steps:
@@ -44,11 +44,10 @@ jobs:
 
       - name: Verify project structure
         run: |
-          echo "=== Repo root files ==="
           ls -la
-          test -f gradlew && echo "gradlew: OK" || echo "gradlew: MISSING"
-          test -f gradle/wrapper/gradle-wrapper.properties && echo "gradle-wrapper.properties: OK" || echo "MISSING"
-          test -f app/build.gradle && echo "app/build.gradle: OK" || echo "MISSING"
+          for f in gradlew app/build.gradle build.gradle settings.gradle gradle/wrapper/gradle-wrapper.properties; do
+            test -f "$f" && echo "OK: $f" || { echo "MISSING: $f"; exit 1; }
+          done
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -56,35 +55,24 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Cache Gradle wrapper
-        uses: actions/cache@v4
-        with:
-          path: ~/.gradle/wrapper
-          key: gradle-wrapper-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: gradle-wrapper-
-
-      - name: Cache Gradle caches
+      - name: Cache Gradle
         uses: actions/cache@v4
         with:
           path: |
+            ~/.gradle/wrapper
             ~/.gradle/caches
-            ~/.gradle/configuration-cache
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', 'gradle/wrapper/gradle-wrapper.properties') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', '**/*.gradle*') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      - name: Cache Android SDK platforms
+      - name: Cache Android SDK
         uses: actions/cache@v4
         with:
-          path: ${{ env.ANDROID_SDK_ROOT }}/platforms
-          key: android-platforms-34-${{ runner.os }}
+          path: |
+            ${{ env.ANDROID_SDK_ROOT }}/platforms
+            ${{ env.ANDROID_SDK_ROOT }}/build-tools
+          key: android-sdk-34-${{ runner.os }}
 
-      - name: Cache Android build-tools
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.ANDROID_SDK_ROOT }}/build-tools
-          key: android-build-tools-34-${{ runner.os }}
-
-      - name: Set up Android SDK
+      - name: Accept Android SDK licenses
         run: |
           yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
           $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
@@ -123,72 +111,86 @@ jobs:
         run: |
           if [ -n "$SECRET_KS_B64" ]; then
             echo "$SECRET_KS_B64" | base64 -d > app/release.jks
-            STORE_FILE="./release.jks"; STORE_PASS="$SECRET_KS_PASS"
-            KEY_ALIAS="$SECRET_KEY_ALIAS"; KEY_PASS="$SECRET_KEY_PASS"
+            SF="./release.jks"; SP="$SECRET_KS_PASS"; KA="$SECRET_KEY_ALIAS"; KP="$SECRET_KEY_PASS"
           else
             cp -f .github/workflows/TVBoxOSC.jks app/TVBoxOSC.jks
-            STORE_FILE="./TVBoxOSC.jks"; STORE_PASS="TVBoxOSC"
-            KEY_ALIAS="TVBoxOSC"; KEY_PASS="TVBoxOSC"
+            SF="./TVBoxOSC.jks"; SP="TVBoxOSC"; KA="TVBoxOSC"; KP="TVBoxOSC"
           fi
           printf '\nRELEASE_STORE_FILE=%s\nRELEASE_STORE_PASSWORD=%s\nRELEASE_KEY_ALIAS=%s\nRELEASE_KEY_PASSWORD=%s\n' \
-            "$STORE_FILE" "$STORE_PASS" "$KEY_ALIAS" "$KEY_PASS" >> gradle.properties
+            "$SF" "$SP" "$KA" "$KP" >> gradle.properties
           python3 -c "
           import sys
-          sf,sp,ka,kp = sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4]
-          signing = ('    signingConfigs {\n        myConfig {\n'
-              '            storeFile file(\"'+sf+'\")\n            storePassword \"'+sp+'\"\n'
-              '            keyAlias \"'+ka+'\"\n            keyPassword \"'+kp+'\"\n'
+          sf,sp,ka,kp=sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4]
+          signing=('    signingConfigs {\n        myConfig {\n'
+              '            storeFile file(\"'+sf+'\")\n'
+              '            storePassword \"'+sp+'\"\n'
+              '            keyAlias \"'+ka+'\"\n'
+              '            keyPassword \"'+kp+'\"\n'
               '            v1SigningEnabled true\n            v2SigningEnabled true\n        }\n    }\n')
-          with open('app/build.gradle') as f: txt = f.read()
+          with open('app/build.gradle') as f: txt=f.read()
           if 'signingConfigs' not in txt:
-              txt = txt.replace('android {','android {\n'+signing,1)
-              txt = txt.replace('release {','release {\n            signingConfig signingConfigs.myConfig',1)
-              open('app/build.gradle','w').write(txt)
-              print('Signing injected.')
+              txt=txt.replace('android {','android {\n'+signing,1)
+              txt=txt.replace('release {','release {\n            signingConfig signingConfigs.myConfig',1)
+              open('app/build.gradle','w').write(txt); print('Signing injected.')
           else: print('Already present.')
-          " "$STORE_FILE" "$STORE_PASS" "$KEY_ALIAS" "$KEY_PASS"
+          " "$SF" "$SP" "$KA" "$KP"
 
+      # ▼ 关键修复：push触发时inputs为空，必须用硬编码默认值
       - name: Resolve build tasks
         id: tasks
         run: |
-          VARIANT="${{ inputs.variant || 'arm64-java' }}"
-          TYPE="${{ inputs.build_type || 'debug' }}"
-          CAP="$(echo "${TYPE:0:1}" | tr a-z A-Z)${TYPE:1}"
+          VARIANT="${{ inputs.variant }}"
+          TYPE="${{ inputs.build_type }}"
+          [ -z "$VARIANT" ] && VARIANT="arm64-java"
+          [ -z "$TYPE" ] && TYPE="debug"
+          CAP="$(printf '%s' "${TYPE:0:1}" | tr 'a-z' 'A-Z')${TYPE:1}"
           case "$VARIANT" in
             arm64-java)   TASKS="assembleArm64GenericNormal${CAP}";   DESC="arm64-v8a/Java/${TYPE}";;
             armeabi-java) TASKS="assembleArmeabiGenericNormal${CAP}"; DESC="armeabi-v7a/Java/${TYPE}";;
             arm64-python) TASKS="assembleArm64GenericPython${CAP}";   DESC="arm64-v8a/Python/${TYPE}";;
-            all)          TASKS="assembleArm64GenericNormal${CAP} assembleArmeabiGenericNormal${CAP}"; DESC="arm64+armeabi/Java/${TYPE}";;
+            all)          TASKS="assembleArm64GenericNormal${CAP} assembleArmeabiGenericNormal${CAP}"; DESC="all/Java/${TYPE}";;
             *)            TASKS="assembleArm64GenericNormal${CAP}";   DESC="arm64-v8a/Java/${TYPE}";;
           esac
-          echo "tasks=$TASKS" >> "$GITHUB_OUTPUT"
-          echo "desc=$DESC"   >> "$GITHUB_OUTPUT"
-          echo "build_type=$TYPE" >> "$GITHUB_OUTPUT"
-          echo "Resolved: $TASKS"
+          echo "VARIANT=$VARIANT  TYPE=$TYPE  TASKS=$TASKS"
+          echo "tasks=${TASKS}" >> "$GITHUB_OUTPUT"
+          echo "desc=${DESC}"   >> "$GITHUB_OUTPUT"
+          echo "type=${TYPE}"   >> "$GITHUB_OUTPUT"
+
+      - name: Verify tasks output
+        run: |
+          echo "tasks='${{ steps.tasks.outputs.tasks }}'"
+          [ -z "${{ steps.tasks.outputs.tasks }}" ] && { echo "ERROR: tasks is empty!"; exit 1; } || echo "OK"
 
       - name: Clean AndServer incremental cache
-        run: |
-          rm -rf app/build/intermediates/merged_assets app/build/tmp || true
+        run: rm -rf app/build/intermediates/merged_assets app/build/tmp || true
 
+      # ▼ 关键修复：set -o pipefail 保留 Gradle 真实退出码
       - name: Build APK
         env:
           GRADLE_OPTS: "-Xmx4g -Dfile.encoding=UTF-8 -Dkotlin.daemon.jvm.options=-Xmx2g"
         run: |
+          set -o pipefail
           chmod +x gradlew
+          echo ">>> Task: ${{ steps.tasks.outputs.tasks }}"
           ./gradlew ${{ steps.tasks.outputs.tasks }} \
             --build-cache --parallel --no-daemon --stacktrace -x lint \
             2>&1 | tee build.log
 
+      # ▼ 关键修复：if:always() 确保失败时也搜索，方便调试
       - name: Collect APK files
-        if: success()
+        if: always()
         run: |
+          echo "=== All build outputs ==="
+          find app/build/outputs -type f 2>/dev/null | head -20 || echo "(no outputs)"
           mkdir -p output/apk
           COUNT=0
           while IFS= read -r f; do
-            cp "$f" output/apk/ && COUNT=$((COUNT+1)) && echo "Collected: $(basename $f)"
-          done < <(find app/build/outputs/apk -name "*.apk" 2>/dev/null)
+            cp "$f" output/apk/
+            echo "Collected: $(basename $f)"
+            COUNT=$((COUNT+1))
+          done < <(find app/build/outputs -name "*.apk" 2>/dev/null)
           echo "APK_COUNT=$COUNT" >> "$GITHUB_ENV"
-          ls -lh output/apk/ || true
+          echo "Total: $COUNT APK(s)"
 
       - name: Build summary
         if: always()
@@ -200,21 +202,22 @@ jobs:
             echo "| 分支 | \`${{ github.ref_name }}\` |"
             echo "| Commit | \`${GITHUB_SHA:0:7}\` |"
             echo "| 变体 | ${{ steps.tasks.outputs.desc }} |"
+            echo "| Task | \`${{ steps.tasks.outputs.tasks }}\` |"
             echo "| JDK | 17 Temurin |"
             echo ""
             if ls output/apk/*.apk 1>/dev/null 2>&1; then
               echo "### ✅ APK 文件"
               for f in output/apk/*.apk; do echo "- \`$(basename $f)\` ($(du -sh $f|cut -f1))"; done
             else
-              echo "### ❌ 未生成 APK，请查看编译日志 Artifact"
+              echo "### ❌ 未生成 APK，请下载 build-log Artifact 查看详细错误"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
-        if: success() && env.APK_COUNT != '0'
+        if: env.APK_COUNT != '0'
         with:
-          name: TVBox-APK-${{ steps.tasks.outputs.build_type }}-run${{ github.run_number }}
+          name: TVBox-APK-run${{ github.run_number }}
           path: output/apk/*.apk
           retention-days: 30
           compression-level: 0
@@ -227,22 +230,6 @@ jobs:
           path: build.log
           if-no-files-found: ignore
           retention-days: 7
-
-      - name: Create GitHub Release
-        uses: ncipollo/release-action@v1
-        if: |
-          success() &&
-          github.event_name == 'push' &&
-          github.ref == 'refs/heads/master' &&
-          env.APK_COUNT != '0'
-        with:
-          tag: "v${{ github.run_number }}"
-          name: "TVBox 美化版 Build #${{ github.run_number }}"
-          body: |
-            - 变体: ${{ steps.tasks.outputs.desc }}
-            - Commit: `${{ github.sha }}`
-          artifacts: "output/apk/*.apk"
-          makeLatest: true
 
   clean:
     name: Clean old runs
