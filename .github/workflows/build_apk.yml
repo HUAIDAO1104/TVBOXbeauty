@@ -1,8 +1,5 @@
 name: Build TVBox APK
 
-# ─────────────────────────────────────────────────────────────────
-# Triggers
-# ─────────────────────────────────────────────────────────────────
 on:
   push:
     branches:
@@ -19,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       variant:
-        description: '编译变体 (arm64-java / armeabi-java / arm64-python / all)'
+        description: '编译变体'
         required: false
         default: 'arm64-java'
         type: choice
@@ -37,7 +34,7 @@ on:
           - debug
           - release
       sign_apk:
-        description: '签名 APK（release 时使用仓库 Secrets 或内置测试密钥）'
+        description: '是否签名 APK'
         required: false
         default: 'true'
         type: choice
@@ -45,44 +42,33 @@ on:
           - 'true'
           - 'false'
 
-# 同一分支只保留最新一次运行，节省 CI 资源
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# ─────────────────────────────────────────────────────────────────
-# Jobs
-# ─────────────────────────────────────────────────────────────────
 jobs:
   build:
-    name: "Build TVBox APK (${{ inputs.variant || 'arm64-java' }} / ${{ inputs.build_type || 'debug' }})"
+    name: "TVBox APK (${{ inputs.variant || 'arm64-java' }} / ${{ inputs.build_type || 'debug' }})"
     runs-on: ubuntu-latest
     defaults:
       run:
-        # 项目源码位于仓库子目录 tvbox_source/
         working-directory: tvbox_source
 
     steps:
-      # ────────────────────────────────────────────
-      # 1. 检出完整仓库（含子模块）
-      # ────────────────────────────────────────────
+      # ── 1. 检出代码 ──────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # ────────────────────────────────────────────
-      # 2. 设置 JDK 17（AGP 7.4 / R8 8.x 最低要求）
-      # ────────────────────────────────────────────
+      # ── 2. JDK 17 ────────────────────────────────
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # ────────────────────────────────────────────
-      # 3. 缓存 Gradle Wrapper、依赖、构建缓存
-      # ────────────────────────────────────────────
+      # ── 3 & 4. Gradle 缓存 ───────────────────────
       - name: Cache Gradle wrapper
         uses: actions/cache@v4
         with:
@@ -96,44 +82,31 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/configuration-cache
-          key: gradle-caches-${{ runner.os }}-${{ hashFiles('tvbox_source/**/*.gradle*', 'tvbox_source/**/gradle-wrapper.properties', 'tvbox_source/**/libs.versions.toml') }}
-          restore-keys: |
-            gradle-caches-${{ runner.os }}-
+          key: gradle-${{ runner.os }}-${{ hashFiles('tvbox_source/**/*.gradle*', 'tvbox_source/**/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
 
-      # ────────────────────────────────────────────
-      # 4. 缓存 Android SDK（build-tools + platforms）
-      # ────────────────────────────────────────────
-      - name: Cache Android SDK packages
+      # ── 5 & 6. Android SDK 缓存 ──────────────────
+      - name: Cache Android SDK platforms
         uses: actions/cache@v4
         with:
           path: ${{ env.ANDROID_SDK_ROOT }}/platforms
-          key: android-sdk-platforms-34-${{ runner.os }}
+          key: android-platforms-34-${{ runner.os }}
 
       - name: Cache Android build-tools
         uses: actions/cache@v4
         with:
           path: ${{ env.ANDROID_SDK_ROOT }}/build-tools
-          key: android-sdk-build-tools-34-${{ runner.os }}
+          key: android-build-tools-34-${{ runner.os }}
 
-      # ────────────────────────────────────────────
-      # 5. 安装并接受 Android SDK 许可证
-      # ────────────────────────────────────────────
+      # ── 7. 接受 SDK 许可证 & 安装组件 ────────────
       - name: Set up Android SDK
-        run: |
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          # 接受所有 SDK 许可证
-          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          # 确保 platform-34 和 build-tools-34.0.0 已安装
-          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
-            "platforms;android-34" \
-            "build-tools;34.0.0" \
-            --channel=0 2>&1 | tail -5
-          echo "✅ Android SDK ready"
         working-directory: ${{ github.workspace }}
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-34" "build-tools;34.0.0" --channel=0 2>&1 | tail -3
 
-      # ────────────────────────────────────────────
-      # 6. 设置 Python 3.8（Chaquopy pyramid 模块需要）
-      # ────────────────────────────────────────────
+      # ── 8. Python 3.8（Chaquopy 需要）─────────────
       - name: Set up Python 3.8
         uses: actions/setup-python@v5
         with:
@@ -141,59 +114,42 @@ jobs:
           cache: 'pip'
 
       - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install lxml ujson pyquery requests jsonpath cachetools pycryptodome beautifulsoup4
-          echo "✅ Python deps installed"
         working-directory: ${{ github.workspace }}
+        run: pip install lxml ujson pyquery requests jsonpath cachetools pycryptodome beautifulsoup4
 
-      # ────────────────────────────────────────────
-      # 7. 修补 Gradle wrapper URL（替换腾讯镜像为官方源）
-      # ────────────────────────────────────────────
-      - name: Patch Gradle wrapper distribution URL
+      # ── 9. 修复 Gradle wrapper URL ────────────────
+      - name: Patch Gradle wrapper URL
         run: |
-          WRAPPER_PROPS="gradle/wrapper/gradle-wrapper.properties"
-          if [ -f "$WRAPPER_PROPS" ]; then
-            sed -i 's|https://mirrors.cloud.tencent.com/gradle/|https://services.gradle.org/distributions/|g' "$WRAPPER_PROPS"
-            sed -i 's|https://downloads.gradle-dn.com/distributions/|https://services.gradle.org/distributions/|g' "$WRAPPER_PROPS"
-            echo "Gradle wrapper URL after patch:"
-            grep distributionUrl "$WRAPPER_PROPS"
-          fi
+          sed -i 's|https://mirrors.cloud.tencent.com/gradle/|https://services.gradle.org/distributions/|g' gradle/wrapper/gradle-wrapper.properties
+          sed -i 's|https://downloads.gradle-dn.com/distributions/|https://services.gradle.org/distributions/|g' gradle/wrapper/gradle-wrapper.properties
+          grep distributionUrl gradle/wrapper/gradle-wrapper.properties
 
-      # ────────────────────────────────────────────
-      # 8. 修补 pyramid/build.gradle（删除 Windows Python 路径）
-      # ────────────────────────────────────────────
+      # ── 10. 修复 pyramid/build.gradle ────────────
       - name: Patch pyramid build.gradle
         run: |
           if [ -f pyramid/build.gradle ]; then
             sed -i '/buildPython.*python\.exe/d' pyramid/build.gradle
-            echo "✅ pyramid/build.gradle patched"
           fi
 
-      # ────────────────────────────────────────────
-      # 9. 生成 local.properties
-      # ────────────────────────────────────────────
+      # ── 11. local.properties ─────────────────────
       - name: Create local.properties
-        run: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          echo "local.properties created with sdk.dir=$ANDROID_SDK_ROOT"
+        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
-      # ────────────────────────────────────────────
-      # 10. 配置 APK 签名
-      #     优先使用仓库 Secrets；未配置时回退到内置测试密钥
-      # ────────────────────────────────────────────
+      # ── 12. 签名配置（python3 -c 注入，无 heredoc）──
       - name: Configure APK signing
-        if: ${{ (inputs.sign_apk != 'false') && (inputs.build_type == 'release' || github.event_name != 'workflow_dispatch') }}
+        env:
+          SECRET_KS_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          SECRET_KS_PASS: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          SECRET_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          SECRET_KEY_PASS: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
-          if [ -n "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
-            echo "▶ Using repository signing secrets"
-            echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
+          if [ -n "$SECRET_KS_B64" ]; then
+            echo "$SECRET_KS_B64" | base64 -d > app/release.jks
             STORE_FILE="./release.jks"
-            STORE_PASS="${{ secrets.RELEASE_STORE_PASSWORD }}"
-            KEY_ALIAS="${{ secrets.RELEASE_KEY_ALIAS }}"
-            KEY_PASS="${{ secrets.RELEASE_KEY_PASSWORD }}"
+            STORE_PASS="$SECRET_KS_PASS"
+            KEY_ALIAS="$SECRET_KEY_ALIAS"
+            KEY_PASS="$SECRET_KEY_PASS"
           else
-            echo "▶ Using built-in test keystore (TVBoxOSC.jks)"
             cp -f ../.github/workflows/TVBoxOSC.jks app/TVBoxOSC.jks
             STORE_FILE="./TVBoxOSC.jks"
             STORE_PASS="TVBoxOSC"
@@ -201,182 +157,139 @@ jobs:
             KEY_PASS="TVBoxOSC"
           fi
 
-          {
-            echo "RELEASE_STORE_FILE=${STORE_FILE}"
-            echo "RELEASE_STORE_PASSWORD=${STORE_PASS}"
-            echo "RELEASE_KEY_ALIAS=${KEY_ALIAS}"
-            echo "RELEASE_KEY_PASSWORD=${KEY_PASS}"
-          } >> gradle.properties
+          printf '\nRELEASE_STORE_FILE=%s\n'     "$STORE_FILE" >> gradle.properties
+          printf 'RELEASE_STORE_PASSWORD=%s\n'   "$STORE_PASS" >> gradle.properties
+          printf 'RELEASE_KEY_ALIAS=%s\n'        "$KEY_ALIAS"  >> gradle.properties
+          printf 'RELEASE_KEY_PASSWORD=%s\n'     "$KEY_PASS"   >> gradle.properties
 
-          SIGNING_CONFIGS=$(cat <<'EOF'
-    signingConfigs {
-        if (project.hasProperty("RELEASE_STORE_FILE")) {
-            myConfig {
-                storeFile file(RELEASE_STORE_FILE)
-                storePassword RELEASE_STORE_PASSWORD
-                keyAlias RELEASE_KEY_ALIAS
-                keyPassword RELEASE_KEY_PASSWORD
-                v1SigningEnabled true
-                v2SigningEnabled true
-            }
-        }
-    }
-EOF
+          python3 -c "
+          import sys
+          store_file = sys.argv[1]
+          store_pass = sys.argv[2]
+          key_alias  = sys.argv[3]
+          key_pass   = sys.argv[4]
+
+          signing = (
+              '    signingConfigs {\n'
+              '        myConfig {\n'
+              '            storeFile file(\"' + store_file + '\")\n'
+              '            storePassword \"' + store_pass + '\"\n'
+              '            keyAlias \"'    + key_alias  + '\"\n'
+              '            keyPassword \"' + key_pass   + '\"\n'
+              '            v1SigningEnabled true\n'
+              '            v2SigningEnabled true\n'
+              '        }\n'
+              '    }\n'
           )
-          SIGNING_CONFIG_LINE="                signingConfig signingConfigs.myConfig"
 
-          if ! grep -q "signingConfigs" app/build.gradle; then
-            perl -i -0pe "s|(android \{)|\$1\n${SIGNING_CONFIGS}|" app/build.gradle
-            perl -i -0pe "s|(release \{)|\$1\n${SIGNING_CONFIG_LINE}|" app/build.gradle
-            echo "✅ Signing configuration injected into app/build.gradle"
-          else
-            echo "ℹ️  signingConfigs already present in app/build.gradle"
-          fi
+          with open('app/build.gradle') as f:
+              txt = f.read()
 
-      # ────────────────────────────────────────────
-      # 11. 确定编译任务
-      # ────────────────────────────────────────────
-      - name: Resolve Gradle build tasks
+          if 'signingConfigs' not in txt:
+              txt = txt.replace('android {', 'android {\n' + signing, 1)
+              txt = txt.replace('release {', 'release {\n            signingConfig signingConfigs.myConfig', 1)
+              with open('app/build.gradle', 'w') as f:
+                  f.write(txt)
+              print('Signing injected.')
+          else:
+              print('signingConfigs already present.')
+          " "$STORE_FILE" "$STORE_PASS" "$KEY_ALIAS" "$KEY_PASS"
+
+      # ── 13. 确定 Gradle Task ──────────────────────
+      - name: Resolve build tasks
         id: tasks
         run: |
           VARIANT="${{ inputs.variant || 'arm64-java' }}"
           TYPE="${{ inputs.build_type || 'debug' }}"
-          TYPE_CAP="$(echo "${TYPE:0:1}" | tr a-z A-Z)${TYPE:1}"
+          CAP="$(echo "${TYPE:0:1}" | tr a-z A-Z)${TYPE:1}"
 
           case "$VARIANT" in
-            "arm64-java")
-              TASKS="assembleArm64GenericNormal${TYPE_CAP}"
-              DESC="arm64-v8a / Java / ${TYPE}"
-              ;;
-            "armeabi-java")
-              TASKS="assembleArmeabiGenericNormal${TYPE_CAP}"
-              DESC="armeabi-v7a / Java / ${TYPE}"
-              ;;
-            "arm64-python")
-              TASKS="assembleArm64GenericPython${TYPE_CAP}"
-              DESC="arm64-v8a / Python / ${TYPE}"
-              ;;
-            "all")
-              TASKS="assembleArm64GenericNormal${TYPE_CAP} assembleArmeabiGenericNormal${TYPE_CAP}"
-              DESC="arm64 + armeabi / Java / ${TYPE}"
-              ;;
-            *)
-              TASKS="assembleArm64GenericNormal${TYPE_CAP}"
-              DESC="arm64-v8a / Java / ${TYPE} (默认)"
-              ;;
+            arm64-java)    TASKS="assembleArm64GenericNormal${CAP}";   DESC="arm64-v8a/Java/${TYPE}";;
+            armeabi-java)  TASKS="assembleArmeabiGenericNormal${CAP}";  DESC="armeabi-v7a/Java/${TYPE}";;
+            arm64-python)  TASKS="assembleArm64GenericPython${CAP}";   DESC="arm64-v8a/Python/${TYPE}";;
+            all)           TASKS="assembleArm64GenericNormal${CAP} assembleArmeabiGenericNormal${CAP}"; DESC="arm64+armeabi/Java/${TYPE}";;
+            *)             TASKS="assembleArm64GenericNormal${CAP}";   DESC="arm64-v8a/Java/${TYPE}";;
           esac
 
           echo "tasks=$TASKS"     >> "$GITHUB_OUTPUT"
           echo "desc=$DESC"       >> "$GITHUB_OUTPUT"
           echo "build_type=$TYPE" >> "$GITHUB_OUTPUT"
-          echo "✅ Build tasks resolved: $TASKS"
+          echo "Task: $TASKS"
 
-      # ────────────────────────────────────────────
-      # 12. AndServer 插件增量构建 workaround
-      # ────────────────────────────────────────────
-      - name: Workaround - clean incremental state for AndServer
+      # ── 14. 清理 AndServer 增量缓存 ───────────────
+      - name: Clean AndServer incremental cache
         run: |
           rm -rf app/build/intermediates/merged_assets || true
           rm -rf app/build/tmp || true
-          echo "✅ Incremental state cleared"
 
-      # ────────────────────────────────────────────
-      # 13. Gradle 编译
-      # ────────────────────────────────────────────
-      - name: Build APK with Gradle
-        run: |
-          chmod +x gradlew
-          echo "▶ Building: ${{ steps.tasks.outputs.desc }}"
-          echo "▶ Gradle tasks: ${{ steps.tasks.outputs.tasks }}"
-
-          ./gradlew ${{ steps.tasks.outputs.tasks }} \
-            --build-cache \
-            --parallel \
-            --no-daemon \
-            --stacktrace \
-            --warning-mode all \
-            -x lint \
-            2>&1 | tee ../build.log
-
-          echo "✅ Gradle build finished"
+      # ── 15. Gradle 编译 ───────────────────────────
+      - name: Build APK
         env:
           GRADLE_OPTS: "-Xmx4g -Dfile.encoding=UTF-8 -Dkotlin.daemon.jvm.options=-Xmx2g"
+        run: |
+          chmod +x gradlew
+          ./gradlew ${{ steps.tasks.outputs.tasks }} \
+            --build-cache --parallel --no-daemon --stacktrace -x lint \
+            2>&1 | tee ../build.log
 
-      # ────────────────────────────────────────────
-      # 14. 整理输出 APK
-      # ────────────────────────────────────────────
+      # ── 16. 收集 APK ──────────────────────────────
       - name: Collect APK files
         if: success()
         run: |
           mkdir -p ../output/apk
-          APK_COUNT=0
-          while IFS= read -r apk; do
-            base=$(basename "$apk")
-            echo "  Found: $base ($(du -sh "$apk" | cut -f1))"
-            cp "$apk" "../output/apk/$base"
-            APK_COUNT=$((APK_COUNT + 1))
+          COUNT=0
+          while IFS= read -r f; do
+            cp "$f" ../output/apk/
+            echo "Collected: $(basename $f)"
+            COUNT=$((COUNT+1))
           done < <(find app/build/outputs/apk -name "*.apk" 2>/dev/null)
-
-          echo "APK_COUNT=$APK_COUNT" >> "$GITHUB_ENV"
-          echo "Total APKs collected: $APK_COUNT"
+          echo "APK_COUNT=$COUNT" >> "$GITHUB_ENV"
           ls -lh ../output/apk/ || true
 
-      # ────────────────────────────────────────────
-      # 15. 生成构建摘要
-      # ────────────────────────────────────────────
-      - name: Generate build summary
+      # ── 17. 编译摘要 ──────────────────────────────
+      - name: Build summary
         if: always()
+        working-directory: ${{ github.workspace }}
         run: |
           {
-            echo "## 🏗️ TVBox APK 编译结果"
-            echo ""
+            echo "## TVBox APK 编译结果"
             echo "| 项目 | 值 |"
             echo "|------|-----|"
             echo "| 分支 | \`${{ github.ref_name }}\` |"
             echo "| Commit | \`${GITHUB_SHA:0:7}\` |"
-            echo "| 编译变体 | ${{ steps.tasks.outputs.desc }} |"
-            echo "| JDK | 17 (Temurin) |"
-            echo "| 触发方式 | ${{ github.event_name }} |"
+            echo "| 变体 | ${{ steps.tasks.outputs.desc }} |"
+            echo "| JDK | 17 Temurin |"
             echo ""
-            if [ -d "../output/apk" ] && ls ../output/apk/*.apk 1>/dev/null 2>&1; then
-              echo "### ✅ 生成的 APK 文件"
-              echo ""
-              for f in ../output/apk/*.apk; do
-                size=$(du -sh "$f" | cut -f1)
-                echo "- \`$(basename "$f")\` — **$size**"
+            if ls output/apk/*.apk 1>/dev/null 2>&1; then
+              echo "### APK 文件"
+              for f in output/apk/*.apk; do
+                echo "- \`$(basename $f)\` ($(du -sh $f | cut -f1))"
               done
             else
-              echo "### ❌ 未找到 APK，请检查编译日志 Artifact"
+              echo "### 未生成 APK，请查看编译日志 Artifact"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-        working-directory: ${{ github.workspace }}
 
-      # ────────────────────────────────────────────
-      # 16. 上传 APK 为 Artifact（成功时，保留 30 天）
-      # ────────────────────────────────────────────
+      # ── 18. 上传 APK Artifact（保留 30 天）─────────
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         if: success() && env.APK_COUNT != '0'
         with:
-          name: TVBox-APK-${{ github.ref_name }}-${{ steps.tasks.outputs.build_type }}-${{ github.run_number }}
+          name: TVBox-APK-${{ github.ref_name }}-${{ steps.tasks.outputs.build_type }}-run${{ github.run_number }}
           path: output/apk/*.apk
           retention-days: 30
           compression-level: 0
 
-      # ────────────────────────────────────────────
-      # 17. 上传编译日志（无论成败，保留 7 天）
-      # ────────────────────────────────────────────
+      # ── 19. 上传编译日志（保留 7 天）─────────────
       - name: Upload build log
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: build-log-${{ github.run_number }}
+          name: build-log-run${{ github.run_number }}
           path: build.log
           retention-days: 7
 
-      # ────────────────────────────────────────────
-      # 18. 创建 GitHub Release（仅 master push + 编译成功）
-      # ────────────────────────────────────────────
+      # ── 20. 创建 Release（仅 master push）─────────
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         if: |
@@ -388,28 +301,16 @@ EOF
           tag: "v${{ github.run_number }}"
           name: "TVBox 美化版 Build #${{ github.run_number }}"
           body: |
-            ## TVBox UI 美化版 自动构建
-
-            | 项目 | 值 |
-            |------|-----|
-            | 分支 | `${{ github.ref_name }}` |
-            | Commit | `${{ github.sha }}` |
-            | 变体 | ${{ steps.tasks.outputs.desc }} |
-
-            ### 本次改动
-            - 首页现代化布局（轮播图 BannerView + 卡片美化）
-            - 卡片 12mm 圆角 + 底部渐变 + 主题色标签
-            - 全局焦点动画优化（AccelerateDecelerate 200ms）
-            - 修复 `vs_270` 缺失导致的 AAPT 资源链接错误
+            ## TVBox UI 美化版自动构建
+            - 分支: `${{ github.ref_name }}`
+            - Commit: `${{ github.sha }}`
+            - 变体: ${{ steps.tasks.outputs.desc }}
           artifacts: "output/apk/*.apk"
-          allowUpdates: false
           makeLatest: true
 
-  # ─────────────────────────────────────────────
-  # 清理旧的 Workflow 运行
-  # ─────────────────────────────────────────────
+  # ── 清理旧运行 ────────────────────────────────────
   clean:
-    name: Clean old workflow runs
+    name: Clean old runs
     needs: build
     runs-on: ubuntu-latest
     if: always()
