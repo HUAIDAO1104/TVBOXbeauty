@@ -36,30 +36,62 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. 检出完整源码（始终用 genspark_ai_developer 分支）
+      # ── 1. 检出主仓库（genspark_ai_developer 分支，含 app/ 等所有文件）
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: genspark_ai_developer
 
-      # ── 2. 验证关键文件
+      # ── 2. 从上游获取缺失的 quickjs / pyramid 模块
+      #       genspark_ai_developer 分支不含这两个目录，必须从原始仓库克隆
+      - name: Fetch missing quickjs and pyramid modules
+        run: |
+          echo "=== Cloning upstream TVBoxOS for quickjs/pyramid ==="
+          git clone --depth=1 https://github.com/q215613905/TVBoxOS.git /tmp/tvboxos_upstream
+
+          echo "=== Copying quickjs module ==="
+          if [ -d /tmp/tvboxos_upstream/quickjs ]; then
+            cp -r /tmp/tvboxos_upstream/quickjs ./quickjs
+            echo "✅ quickjs copied"
+          else
+            echo "❌ quickjs not found in upstream!"
+            exit 1
+          fi
+
+          echo "=== Copying pyramid module ==="
+          if [ -d /tmp/tvboxos_upstream/pyramid ]; then
+            cp -r /tmp/tvboxos_upstream/pyramid ./pyramid
+            echo "✅ pyramid copied"
+          else
+            echo "⚠️ pyramid not found, creating stub..."
+            mkdir -p pyramid/src/main
+            printf 'plugins { id "com.android.library" }\nandroid {\n  compileSdk 34\n  defaultConfig { minSdkVersion 21; targetSdkVersion 28 }\n  flavorDimensions "abi"\n  productFlavors {\n    armeabi { dimension = "abi"; ndk { abiFilters "armeabi-v7a" } }\n    arm64   { dimension = "abi"; ndk { abiFilters "arm64-v8a"  } }\n  }\n}\n' > pyramid/build.gradle
+            printf '<?xml version="1.0" encoding="utf-8"?><manifest package="com.undcover.freedom.pyramid"/>' > pyramid/src/main/AndroidManifest.xml
+          fi
+
+          echo "=== Project structure after fetch ==="
+          ls -la
+          ls quickjs/ | head -5
+          ls pyramid/ | head -5
+
+      # ── 3. 验证关键文件
       - name: Verify project structure
         run: |
-          echo "=== Root files ==="
-          ls -la
-          for f in gradlew app/build.gradle build.gradle settings.gradle gradle/wrapper/gradle-wrapper.properties; do
+          for f in gradlew app/build.gradle build.gradle settings.gradle \
+                   gradle/wrapper/gradle-wrapper.properties \
+                   quickjs/build.gradle pyramid/build.gradle; do
             test -f "$f" && echo "OK: $f" || { echo "MISSING: $f"; exit 1; }
           done
 
-      # ── 3. JDK 17
+      # ── 4. JDK 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # ── 4. 缓存 Gradle
+      # ── 5. 缓存 Gradle
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -69,7 +101,7 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', '**/*.gradle*') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      # ── 5. 缓存 Android SDK
+      # ── 6. 缓存 Android SDK
       - name: Cache Android SDK
         uses: actions/cache@v4
         with:
@@ -78,14 +110,14 @@ jobs:
             ${{ env.ANDROID_SDK_ROOT }}/build-tools
           key: android-sdk-34-${{ runner.os }}
 
-      # ── 6. Android SDK 许可证
+      # ── 7. Android SDK 许可证
       - name: Accept Android SDK licenses
         run: |
           yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
           $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
-            "platforms;android-34" "build-tools;34.0.0" --channel=0 2>&1 | tail -3
+            "platforms;android-34" "build-tools;34.0.0" --channel=0 2>&1 | tail -5
 
-      # ── 7. Python 3.8
+      # ── 8. Python 3.8
       - name: Set up Python 3.8
         uses: actions/setup-python@v5
         with:
@@ -94,75 +126,50 @@ jobs:
       - name: Install Python dependencies
         run: pip install lxml ujson pyquery requests jsonpath cachetools pycryptodome beautifulsoup4
 
-      # ── 8. 修复 Gradle wrapper URL
+      # ── 9. 修复 Gradle wrapper URL
       - name: Patch Gradle wrapper URL
         run: |
           FILE="gradle/wrapper/gradle-wrapper.properties"
           sed -i 's|https://mirrors.cloud.tencent.com/gradle/|https://services.gradle.org/distributions/|g' "$FILE"
           sed -i 's|https://downloads.gradle-dn.com/distributions/|https://services.gradle.org/distributions/|g' "$FILE"
-          echo "Gradle distributionUrl:"
           grep distributionUrl "$FILE"
 
-      # ── 9. 修复 pyramid build.gradle
+      # ── 10. 修复 pyramid build.gradle
       - name: Patch pyramid build.gradle
         run: |
           if [ -f pyramid/build.gradle ]; then
             sed -i '/buildPython.*python\.exe/d' pyramid/build.gradle
+            sed -i '/buildPython.*python3/d' pyramid/build.gradle
             echo "Patched pyramid/build.gradle"
           fi
 
-      # ── 关键修复1：给 quickjs 添加 abi flavorDimensions
+      # ── 11. 修复 quickjs build.gradle（添加 abi flavorDimensions）
       - name: Patch quickjs build.gradle
         run: |
-          if [ -f quickjs/build.gradle ] && ! grep -q 'flavorDimensions' quickjs/build.gradle; then
-            python3 -c "
-          txt = open('quickjs/build.gradle').read()
-          patch = '''
-              flavorDimensions \"abi\"
-              productFlavors {
-                  armeabi {
-                      dimension = \"abi\"
-                      ndk { abiFilters 'armeabi-v7a' }
-                  }
-                  arm64 {
-                      dimension = \"abi\"
-                      ndk { abiFilters 'arm64-v8a' }
-                  }
-              }
-          '''
-          txt = txt.replace('android {', 'android {' + patch, 1)
-          open('quickjs/build.gradle','w').write(txt)
-          print('quickjs/build.gradle patched with abi flavors')
-          "
+          if ! grep -q 'flavorDimensions' quickjs/build.gradle; then
+            sed -i 's/android {/android {\n    flavorDimensions "abi"\n    productFlavors {\n        armeabi { dimension = "abi"; ndk { abiFilters "armeabi-v7a" } }\n        arm64   { dimension = "abi"; ndk { abiFilters "arm64-v8a"  } }\n    }/' quickjs/build.gradle
+            echo "Patched quickjs/build.gradle"
           else
-            echo "quickjs/build.gradle already has flavorDimensions or file not found"
+            echo "quickjs already has flavorDimensions"
           fi
+          cat quickjs/build.gradle
 
-      # ── 关键修复2：app 添加 missingDimensionStrategy
+      # ── 12. 修复 app/build.gradle（添加 missingDimensionStrategy）
       - name: Patch app/build.gradle missingDimensionStrategy
         run: |
           if ! grep -q 'missingDimensionStrategy' app/build.gradle; then
-            python3 -c "
-          txt = open('app/build.gradle').read()
-          txt = txt.replace(
-              'multiDexEnabled true',
-              'multiDexEnabled true\n        missingDimensionStrategy \'brand\', \'generic\'\n        missingDimensionStrategy \'mode\', \'normal\'',
-              1
-          )
-          open('app/build.gradle','w').write(txt)
-          print('app/build.gradle patched with missingDimensionStrategy')
-          "
+            sed -i '/multiDexEnabled true/a\        missingDimensionStrategy '"'"'brand'"'"', '"'"'generic'"'"'\n        missingDimensionStrategy '"'"'mode'"'"', '"'"'normal'"'"'' app/build.gradle
+            echo "Patched app/build.gradle"
           else
-            echo "app/build.gradle already has missingDimensionStrategy"
+            echo "missingDimensionStrategy already present"
           fi
+          grep -A2 'multiDexEnabled' app/build.gradle
 
-      # ── 10. local.properties
+      # ── 13. local.properties
       - name: Create local.properties
-        run: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          cat local.properties
+        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
-      # ── 11. 签名配置
+      # ── 14. 签名配置
       - name: Configure APK signing
         env:
           SECRET_KS_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
@@ -182,67 +189,62 @@ jobs:
           python3 -c "
           import sys
           sf,sp,ka,kp = sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4]
-          signing = ('    signingConfigs {\n        myConfig {\n'
-              '            storeFile file(\"'+sf+'\")\n'
-              '            storePassword \"'+sp+'\"\n'
-              '            keyAlias \"'+ka+'\"\n'
-              '            keyPassword \"'+kp+'\"\n'
-              '            v1SigningEnabled true\n'
-              '            v2SigningEnabled true\n'
-              '        }\n    }\n')
-          with open('app/build.gradle') as f: txt=f.read()
+          lines = [
+              '    signingConfigs {',
+              '        myConfig {',
+              '            storeFile file(\"' + sf + '\")',
+              '            storePassword \"' + sp + '\"',
+              '            keyAlias \"' + ka + '\"',
+              '            keyPassword \"' + kp + '\"',
+              '            v1SigningEnabled true',
+              '            v2SigningEnabled true',
+              '        }',
+              '    }',
+          ]
+          signing = chr(10).join(lines) + chr(10)
+          with open('app/build.gradle') as f:
+              txt = f.read()
           if 'signingConfigs' not in txt:
-              txt=txt.replace('android {','android {\n'+signing,1)
-              txt=txt.replace('release {','release {\n            signingConfig signingConfigs.myConfig',1)
+              txt = txt.replace('android {', 'android {' + chr(10) + signing, 1)
+              txt = txt.replace('release {', 'release {' + chr(10) + '            signingConfig signingConfigs.myConfig', 1)
               open('app/build.gradle','w').write(txt)
               print('Signing injected.')
-          else: print('Already present.')
+          else:
+              print('Already present.')
           " "$SF" "$SP" "$KA" "$KP"
 
-      # ── 12. 确定编译 Task
+      # ── 15. 确定编译 Task
       - name: Resolve build tasks
         id: tasks
         run: |
-          VARIANT="${INPUT_VARIANT:-arm64-java}"
-          TYPE="${INPUT_TYPE:-debug}"
+          VARIANT="${{ inputs.variant }}"
+          TYPE="${{ inputs.build_type }}"
+          [ -z "$VARIANT" ] && VARIANT="arm64-java"
+          [ -z "$TYPE" ] && TYPE="debug"
           CAP="$(printf '%s' "${TYPE:0:1}" | tr 'a-z' 'A-Z')${TYPE:1}"
           case "$VARIANT" in
-            arm64-java)   TASKS="assembleArm64GenericNormalDebug";   DESC="arm64-v8a/Java/debug";;
-            armeabi-java) TASKS="assembleArmeabiGenericNormalDebug"; DESC="armeabi-v7a/Java/debug";;
-            arm64-python) TASKS="assembleArm64GenericPythonDebug";   DESC="arm64-v8a/Python/debug";;
-            all)          TASKS="assembleArm64GenericNormalDebug assembleArmeabiGenericNormalDebug"; DESC="arm64+armeabi/Java/debug";;
-            *)            TASKS="assembleArm64GenericNormalDebug";   DESC="arm64-v8a/Java/debug";;
+            arm64-java)   TASKS="assembleArm64GenericNormal${CAP}"; DESC="arm64-v8a/Java/${TYPE}";;
+            armeabi-java) TASKS="assembleArmeabiGenericNormal${CAP}"; DESC="armeabi-v7a/Java/${TYPE}";;
+            arm64-python) TASKS="assembleArm64GenericPython${CAP}"; DESC="arm64-v8a/Python/${TYPE}";;
+            all)          TASKS="assembleArm64GenericNormal${CAP} assembleArmeabiGenericNormal${CAP}"; DESC="arm64+armeabi/Java/${TYPE}";;
+            *)            TASKS="assembleArm64GenericNormal${CAP}"; DESC="arm64-v8a/Java/${TYPE}";;
           esac
-          if [ -n "${{ inputs.variant }}" ]; then
-            VARIANT="${{ inputs.variant }}"
-            TYPE="${{ inputs.build_type }}"
-            CAP="$(printf '%s' "${TYPE:0:1}" | tr 'a-z' 'A-Z')${TYPE:1}"
-            case "$VARIANT" in
-              arm64-java)   TASKS="assembleArm64GenericNormal${CAP}";   DESC="arm64-v8a/Java/${TYPE}";;
-              armeabi-java) TASKS="assembleArmeabiGenericNormal${CAP}"; DESC="armeabi-v7a/Java/${TYPE}";;
-              arm64-python) TASKS="assembleArm64GenericPython${CAP}";   DESC="arm64-v8a/Python/${TYPE}";;
-              all)          TASKS="assembleArm64GenericNormal${CAP} assembleArmeabiGenericNormal${CAP}"; DESC="arm64+armeabi/Java/${TYPE}";;
-              *)            TASKS="assembleArm64GenericNormal${CAP}";   DESC="arm64-v8a/Java/${TYPE}";;
-            esac
-          fi
-          echo "VARIANT=$VARIANT TYPE=$TYPE TASKS=$TASKS"
-          echo "tasks=${TASKS}" >> "$GITHUB_OUTPUT"
-          echo "desc=${DESC}"   >> "$GITHUB_OUTPUT"
-          echo "type=${TYPE}"   >> "$GITHUB_OUTPUT"
+          echo "VARIANT=$VARIANT  TYPE=$TYPE  TASKS=$TASKS"
+          echo "tasks=$TASKS" >> "$GITHUB_OUTPUT"
+          echo "desc=$DESC"   >> "$GITHUB_OUTPUT"
+          echo "type=$TYPE"   >> "$GITHUB_OUTPUT"
 
-      # ── 13. 验证 task 已正确设置
+      # ── 16. 验证 tasks 非空
       - name: Verify tasks output
         run: |
           echo "tasks: '${{ steps.tasks.outputs.tasks }}'"
-          if [ -z "${{ steps.tasks.outputs.tasks }}" ]; then
-            echo "ERROR: tasks output is empty!"; exit 1
-          fi
+          [ -z "${{ steps.tasks.outputs.tasks }}" ] && { echo "ERROR: tasks empty!"; exit 1; } || echo "OK"
 
-      # ── 14. 清理 AndServer 增量缓存
+      # ── 17. 清理 AndServer 增量缓存
       - name: Clean AndServer incremental cache
         run: rm -rf app/build/intermediates/merged_assets app/build/tmp || true
 
-      # ── 15. Gradle 编译
+      # ── 18. Gradle 编译
       - name: Build APK
         env:
           GRADLE_OPTS: "-Xmx4g -Dfile.encoding=UTF-8 -Dkotlin.daemon.jvm.options=-Xmx2g"
@@ -254,12 +256,12 @@ jobs:
             --build-cache --parallel --no-daemon --stacktrace -x lint \
             2>&1 | tee build.log
 
-      # ── 16. 收集 APK
+      # ── 19. 收集 APK
       - name: Collect APK files
         if: always()
         run: |
           echo "=== Build outputs ==="
-          find app/build/outputs -type f 2>/dev/null | head -30
+          find app/build/outputs -type f 2>/dev/null | head -30 || echo "(no outputs)"
           mkdir -p output/apk
           COUNT=0
           while IFS= read -r f; do
@@ -270,7 +272,7 @@ jobs:
           echo "APK_COUNT=$COUNT" >> "$GITHUB_ENV"
           echo "Total APKs: $COUNT"
 
-      # ── 17. 编译摘要
+      # ── 20. 编译摘要
       - name: Build summary
         if: always()
         run: |
@@ -289,11 +291,11 @@ jobs:
                 echo "- \`$(basename $f)\` ($(du -sh $f | cut -f1))"
               done
             else
-              echo "### ❌ 未生成 APK"
+              echo "### ❌ 未生成 APK，请查看 build-log Artifact"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 18. 上传 APK（30 天）
+      # ── 21. 上传 APK（30 天）
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         if: env.APK_COUNT != '0'
@@ -303,7 +305,7 @@ jobs:
           retention-days: 30
           compression-level: 0
 
-      # ── 19. 上传编译日志（7 天）
+      # ── 22. 上传编译日志（7 天）
       - name: Upload build log
         uses: actions/upload-artifact@v4
         if: always()
