@@ -46,11 +46,11 @@ import java.util.List;
 
 /**
  * 首页 UserFragment
- * 布局：左侧竖向导航 + 右侧多分区内容区（轮播图、站点推荐、热门综艺、热门电影、热门剧集、历史记录）
+ * 布局：顶部横向导航栏 + 下方多分区内容区（轮播图、站点推荐、热门综艺、热门电影、热门剧集、历史记录）
  */
 public class UserFragment extends BaseLazyFragment implements View.OnClickListener {
 
-    // ── 左侧导航按钮 ──────────────────────────────────────
+    // ── 导航按钮 ──────────────────────────────────────────
     private LinearLayout tvDrive;
     private LinearLayout tvLive;
     private LinearLayout tvSearch;
@@ -60,7 +60,7 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
     private LinearLayout tvPush;
     private LinearLayout tvDriveCookie;   // 网盘 Cookie 设置
 
-    // ── 右侧内容组件 ──────────────────────────────────────
+    // ── 内容组件 ──────────────────────────────────────────
     private BannerView homeBanner;
     private TextView tvSectionTitle;
     private TextView tvSectionMore;
@@ -113,11 +113,7 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
         } else {
             if (tvSearch != null) tvSearch.setVisibility(View.GONE);
         }
-        if (!Hawk.get(HawkConfig.HOME_MENU_POSITION, true)) {
-            if (tvSetting != null) tvSetting.setVisibility(View.VISIBLE);
-        } else {
-            if (tvSetting != null) tvSetting.setVisibility(View.VISIBLE); // 左侧导航始终显示设置
-        }
+        if (tvSetting != null) tvSetting.setVisibility(View.VISIBLE);
 
         super.onFragmentResume();
 
@@ -141,14 +137,14 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
     protected void init() {
         EventBus.getDefault().register(this);
 
-        // ── 绑定左侧导航按钮 ─────────────────────────────
-        tvDrive      = findViewById(R.id.tvDrive);
-        tvLive       = findViewById(R.id.tvLive);
-        tvSearch     = findViewById(R.id.tvSearch);
-        tvSetting    = findViewById(R.id.tvSetting);
-        tvCollect    = findViewById(R.id.tvFavorite);
-        tvHistory    = findViewById(R.id.tvHistory);
-        tvPush       = findViewById(R.id.tvPush);
+        // ── 绑定导航按钮 ─────────────────────────────────
+        tvDrive       = findViewById(R.id.tvDrive);
+        tvLive        = findViewById(R.id.tvLive);
+        tvSearch      = findViewById(R.id.tvSearch);
+        tvSetting     = findViewById(R.id.tvSetting);
+        tvCollect     = findViewById(R.id.tvFavorite);
+        tvHistory     = findViewById(R.id.tvHistory);
+        tvPush        = findViewById(R.id.tvPush);
         tvDriveCookie = findViewById(R.id.tvDriveCookie);
 
         tvDrive.setOnClickListener(this);
@@ -174,8 +170,8 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
             return HomeActivity.reHome(mContext);
         });
 
-        // ── 绑定右侧内容组件 ─────────────────────────────
-        homeBanner    = findViewById(R.id.homeBanner);
+        // ── 绑定内容组件 ─────────────────────────────────
+        homeBanner     = findViewById(R.id.homeBanner);
         tvSectionTitle = findViewById(R.id.tvSectionTitle);
         tvSectionMore  = findViewById(R.id.tvSectionMore);
         tvVarietyMore  = findViewById(R.id.tvVarietyMore);
@@ -285,31 +281,89 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
     }
 
     // ── 轮播图初始化 ──────────────────────────────────────
+    // 轮播图优先显示站点推荐图片（HOME_REC=1），否则从豆瓣当日热播取前8张
     private void initBanner() {
         if (homeBanner == null) return;
-        List<Movie.Video> bannerData = new ArrayList<>();
-        if (Hawk.get(HawkConfig.HOME_REC, 0) == 1 && homeSourceRec != null) {
+
+        // 优先：站点推荐数据
+        if (Hawk.get(HawkConfig.HOME_REC, 0) == 1 && homeSourceRec != null && !homeSourceRec.isEmpty()) {
+            List<Movie.Video> bannerData = new ArrayList<>();
             for (Movie.Video v : homeSourceRec) {
                 if (v.pic != null && !v.pic.isEmpty()) {
                     bannerData.add(v);
-                    if (bannerData.size() >= 8) break;  // 最多显示8张
+                    if (bannerData.size() >= 8) break;
                 }
             }
+            if (!bannerData.isEmpty()) {
+                homeBanner.setVisibility(View.VISIBLE);
+                homeBanner.setData(bannerData);
+                setupBannerClick();
+                return;
+            }
         }
-        if (!bannerData.isEmpty()) {
-            homeBanner.setVisibility(View.VISIBLE);
-            homeBanner.setData(bannerData);
-            homeBanner.setOnBannerItemClickListener(video -> {
-                if (video.id != null && !video.id.isEmpty()) {
-                    Bundle bundle = new Bundle();
-                    bundle.putString("id", video.id);
-                    bundle.putString("sourceKey", video.sourceKey);
-                    jumpActivity(DetailActivity.class, bundle);
+
+        // 次选：从豆瓣当日热播缓存加载
+        String cachedJson = Hawk.get("home_hot", "");
+        if (!cachedJson.isEmpty()) {
+            List<Movie.Video> bannerData = loadHots(cachedJson);
+            if (!bannerData.isEmpty()) {
+                homeBanner.setVisibility(View.VISIBLE);
+                homeBanner.setData(bannerData.subList(0, Math.min(8, bannerData.size())));
+                setupBannerClick();
+                return;
+            }
+        }
+
+        // 实时从豆瓣加载
+        try {
+            int year = Calendar.getInstance().get(Calendar.YEAR);
+            String doubanHotURL = "https://movie.douban.com/j/new_search_subjects?sort=U&range=0,10&tags=&playable=1&start=0&year_range=" + year + "," + year;
+            String userAgent = UA.random();
+            OkGo.<String>get(doubanHotURL).headers("User-Agent", userAgent).execute(new AbsCallback<String>() {
+                @Override
+                public void onSuccess(Response<String> response) {
+                    String netJson = response.body();
+                    List<Movie.Video> bannerData = loadHots(netJson);
+                    if (!bannerData.isEmpty() && homeBanner != null) {
+                        mActivity.runOnUiThread(() -> {
+                            homeBanner.setVisibility(View.VISIBLE);
+                            homeBanner.setData(bannerData.subList(0, Math.min(8, bannerData.size())));
+                            setupBannerClick();
+                        });
+                    }
+                }
+
+                @Override
+                public String convertResponse(okhttp3.Response response) throws Throwable {
+                    return response.body().string();
                 }
             });
-        } else {
-            homeBanner.setVisibility(View.GONE);
+        } catch (Throwable th) {
+            th.printStackTrace();
         }
+    }
+
+    private void setupBannerClick() {
+        if (homeBanner == null) return;
+        homeBanner.setOnBannerItemClickListener(video -> {
+            if (video.id != null && !video.id.isEmpty()) {
+                Bundle bundle = new Bundle();
+                bundle.putString("id", video.id);
+                bundle.putString("sourceKey", video.sourceKey);
+                jumpActivity(DetailActivity.class, bundle);
+            } else if (video.name != null && !video.name.isEmpty()) {
+                // 豆瓣条目没有id，跳转搜索
+                Intent intent;
+                if (Hawk.get(HawkConfig.FAST_SEARCH_MODE, false)) {
+                    intent = new Intent(mContext, FastSearchActivity.class);
+                } else {
+                    intent = new Intent(mContext, SearchActivity.class);
+                }
+                intent.putExtra("title", video.name);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                mActivity.startActivity(intent);
+            }
+        });
     }
 
     // ── 热门综艺分区 ──────────────────────────────────────
@@ -318,7 +372,7 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
         varietyAdapter = new HomeHotVodAdapter(null, "综艺");
         setupVodAdapterClick(varietyAdapter, false);
         setupRecyclerView(tvVarietyList, varietyAdapter, false);
-        loadDoubanCategory("综艺", varietyAdapter);
+        loadDoubanCategory("综艺", varietyAdapter, null);
     }
 
     // ── 热门电影分区 ──────────────────────────────────────
@@ -327,7 +381,7 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
         movieAdapter = new HomeHotVodAdapter(null, "电影");
         setupVodAdapterClick(movieAdapter, false);
         setupRecyclerView(tvMovieList, movieAdapter, false);
-        loadDoubanCategory("电影", movieAdapter);
+        loadDoubanCategory("电影", movieAdapter, null);
     }
 
     // ── 热门剧集分区 ──────────────────────────────────────
@@ -336,7 +390,7 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
         dramaAdapter = new HomeHotVodAdapter(null, "剧集");
         setupVodAdapterClick(dramaAdapter, false);
         setupRecyclerView(tvDramaList, dramaAdapter, false);
-        loadDoubanCategory("剧集", dramaAdapter);
+        loadDoubanCategory("剧集", dramaAdapter, null);
     }
 
     // ── 历史记录分区 ──────────────────────────────────────
@@ -364,7 +418,7 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
     }
 
     // ── 从豆瓣加载分类数据 ────────────────────────────────
-    private void loadDoubanCategory(String tag, HomeHotVodAdapter adapter) {
+    private void loadDoubanCategory(String tag, HomeHotVodAdapter adapter, Runnable onLoaded) {
         String cacheKey = "home_douban_" + tag;
         String cacheDayKey = "home_douban_day_" + tag;
         try {
@@ -377,7 +431,9 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
             if (requestDay.equals(today)) {
                 String json = Hawk.get(cacheKey, "");
                 if (!json.isEmpty()) {
-                    adapter.setNewData(loadHots(json));
+                    List<Movie.Video> data = loadHots(json);
+                    adapter.setNewData(data);
+                    if (onLoaded != null) onLoaded.run();
                     return;
                 }
             }
@@ -391,7 +447,11 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
                     String netJson = response.body();
                     Hawk.put(cacheDayKey, today);
                     Hawk.put(cacheKey, netJson);
-                    mActivity.runOnUiThread(() -> adapter.setNewData(loadHots(netJson)));
+                    List<Movie.Video> data = loadHots(netJson);
+                    mActivity.runOnUiThread(() -> {
+                        adapter.setNewData(data);
+                        if (onLoaded != null) onLoaded.run();
+                    });
                 }
 
                 @Override
@@ -430,15 +490,15 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
             public void onItemPreSelected(TvRecyclerView parent, View itemView, int position) {
                 itemView.animate()
                         .scaleX(1.0f).scaleY(1.0f)
-                        .setDuration(180)
+                        .setDuration(150)
                         .setInterpolator(new AccelerateDecelerateInterpolator())
                         .start();
             }
             @Override
             public void onItemSelected(TvRecyclerView parent, View itemView, int position) {
                 itemView.animate()
-                        .scaleX(1.05f).scaleY(1.05f)
-                        .setDuration(180)
+                        .scaleX(1.08f).scaleY(1.08f)
+                        .setDuration(150)
                         .setInterpolator(new AccelerateDecelerateInterpolator())
                         .start();
             }
@@ -535,7 +595,16 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
                     String netJson = response.body();
                     Hawk.put("home_hot_day", today);
                     Hawk.put("home_hot", netJson);
-                    mActivity.runOnUiThread(() -> adapter.setNewData(loadHots(netJson)));
+                    List<Movie.Video> data = loadHots(netJson);
+                    mActivity.runOnUiThread(() -> {
+                        adapter.setNewData(data);
+                        // 同步更新轮播图（如果banner还未显示）
+                        if (homeBanner != null && homeBanner.getVisibility() != View.VISIBLE && !data.isEmpty()) {
+                            homeBanner.setVisibility(View.VISIBLE);
+                            homeBanner.setData(data.subList(0, Math.min(8, data.size())));
+                            setupBannerClick();
+                        }
+                    });
                 }
 
                 @Override
@@ -548,6 +617,10 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
         }
     }
 
+    /**
+     * 解析豆瓣 JSON，并将封面图 URL 从小图升级为高清大图
+     * s_ratio_poster / s  →  l（大图，约380KB vs 30KB）
+     */
     private ArrayList<Movie.Video> loadHots(String json) {
         ArrayList<Movie.Video> result = new ArrayList<>();
         try {
@@ -558,7 +631,11 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
                 Movie.Video vod = new Movie.Video();
                 vod.name = obj.get("title").getAsString();
                 vod.note = obj.get("rate").getAsString();
-                vod.pic = obj.get("cover").getAsString() + "@User-Agent=" + UA.random() + "@Referer=https://www.douban.com/";
+                // 升级为豆瓣高清大图：s_ratio_poster → l
+                String coverUrl = obj.get("cover").getAsString()
+                        .replace("/view/photo/s_ratio_poster/", "/view/photo/l/")
+                        .replace("/view/photo/s/", "/view/photo/l/");
+                vod.pic = coverUrl + "@User-Agent=" + UA.random() + "@Referer=https://movie.douban.com/";
                 result.add(vod);
             }
         } catch (Throwable th) {
@@ -572,9 +649,9 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
         @Override
         public void onFocusChange(View v, boolean hasFocus) {
             v.animate()
-                    .scaleX(hasFocus ? 1.08f : 1.0f)
-                    .scaleY(hasFocus ? 1.08f : 1.0f)
-                    .setDuration(200)
+                    .scaleX(hasFocus ? 1.1f : 1.0f)
+                    .scaleY(hasFocus ? 1.1f : 1.0f)
+                    .setDuration(180)
                     .setInterpolator(new AccelerateDecelerateInterpolator())
                     .start();
         }
@@ -601,12 +678,10 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
         } else if (id == R.id.tvDrive) {
             jumpActivity(DriveActivity.class);
         } else if (id == R.id.tvDriveCookie) {
-            // 打开网盘 Cookie 设置对话框
             try {
                 AlistDriveDialog dialog = new AlistDriveDialog(mContext, null);
                 dialog.show();
             } catch (Throwable e) {
-                // 如果 AlistDriveDialog 不支持 null，直接跳转 DriveActivity
                 jumpActivity(DriveActivity.class);
             }
         }

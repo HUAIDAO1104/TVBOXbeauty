@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:background="@drawable/shape_banner_radius">
 
-    <!-- 封面图（centerInside：保持比例完整显示，不裁切） -->
+    <!-- 封面图（centerCrop：填满轮播图区域，高清无模糊） -->
     <ImageView
         android:id="@+id/ivBannerThumb"
         android:layout_width="match_parent"

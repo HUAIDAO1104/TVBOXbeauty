@@ -126,8 +126,14 @@ public class ImgUtil {
      * - 使用 CenterInside（保持比例，不裁切）
      * - 缓存原始图片数据（DiskCacheStrategy.DATA）以保留完整分辨率
      */
+    /**
+     * 专为轮播图/大图展示设计的加载方法
+     * - 使用 PREFER_ARGB_8888（32bit 全色深，不模糊）
+     * - 使用 CenterCrop（填满轮播图区域，比例良好）
+     * - 缓存原始图片数据（DiskCacheStrategy.DATA）以保留完整分辨率
+     */
     public static void loadBanner(String url, ImageView view, int roundingRadius) {
-        view.setScaleType(ImageView.ScaleType.CENTER);
+        view.setScaleType(ImageView.ScaleType.CENTER_CROP);
         if (TextUtils.isEmpty(url)) {
             view.setImageResource(R.drawable.img_loading_placeholder);
             return;
@@ -137,8 +143,7 @@ public class ImgUtil {
             .format(DecodeFormat.PREFER_ARGB_8888)
             .diskCacheStrategy(DiskCacheStrategy.DATA)
             .dontAnimate()
-            .transform(new com.bumptech.glide.load.resource.bitmap.CenterInside(),
-                       new RoundedCorners(roundingRadius));
+            .transform(new CenterCrop(), new RoundedCorners(roundingRadius));
         Glide.with(App.getInstance())
             .asBitmap()
             .load(getUrl(url))
@@ -225,7 +230,10 @@ public class ImgUtil {
         String cookie = null;
 
         if (url.contains("doubanio.com") && !url.contains("@Referer=") && !url.contains("@User-Agent=")) {
-            url += "@Referer=https://api.douban.com/@User-Agent=" + ua;
+            // 升级豆瓣图片为高清大图：s_ratio_poster/s → l（大图）
+            url = url.replace("/view/photo/s_ratio_poster/", "/view/photo/l/")
+                     .replace("/view/photo/s/", "/view/photo/l/");
+            url += "@Referer=https://movie.douban.com/@User-Agent=" + ua;
         }
 
         //检查链接里面是否有自定义header
